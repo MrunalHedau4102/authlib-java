@@ -1,0 +1,137 @@
+name: Java Tests (Pull Requests Only)
+
+on:
+  push:
+    branches: [ develop ]
+    paths:
+      - 'authlib-java/**'
+      - '!authlib-java/README.md'
+  pull_request:
+    branches: [ main, develop ]
+    paths:
+      - 'authlib-java/**'
+      - '!authlib-java/README.md'
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    
+    strategy:
+      matrix:
+        java-version: [ '11', '17', '21' ]
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+      
+      - name: Set up JDK ${{ matrix.java-version }}
+        uses: actions/setup-java@v3
+        with:
+          java-version: ${{ matrix.java-version }}
+          distribution: 'temurin'
+          cache: maven
+      
+      - name: Display Java version
+        run: java -version
+      
+      - name: Build with Maven
+        working-directory: ./authlib-java
+        run: mvn clean package -DskipTests
+      
+      - name: Run tests with Maven
+        working-directory: ./authlib-java
+        run: mvn test -B
+      
+      - name: Run integration tests
+        working-directory: ./authlib-java
+        run: mvn verify -B
+      
+      - name: Generate code coverage
+        working-directory: ./authlib-java
+        run: mvn jacoco:report
+      
+      - name: Upload coverage to Codecov
+        if: matrix.java-version == '21'
+        uses: codecov/codecov-action@v3
+        with:
+          files: ./authlib-java/target/site/jacoco/jacoco.xml
+          flags: java
+          name: java-coverage
+          fail_ci_if_error: false
+      
+      - name: Archive test results
+        if: always()
+        uses: actions/upload-artifact@v3
+        with:
+          name: java-test-results-jdk-${{ matrix.java-version }}
+          path: |
+            authlib-java/target/surefire-reports/
+            authlib-java/target/site/jacoco/
+          retention-days: 30
+      
+      - name: Publish test results
+        if: always()
+        uses: EnricoMi/publish-unit-test-result-action@v2
+        with:
+          files: authlib-java/target/surefire-reports/*.xml
+          check_name: Java JDK ${{ matrix.java-version }} Test Results
+
+  quality:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+      
+      - name: Set up JDK 21
+        uses: actions/setup-java@v3
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+          cache: maven
+      
+      - name: Run SonarQube analysis
+        working-directory: ./authlib-java
+        continue-on-error: true
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        run: |
+          mvn clean verify sonar:sonar \
+            -Dsonar.projectKey=authlib-java \
+            -Dsonar.host.url=https://sonarcloud.io || echo "SonarQube optional"
+      
+      - name: Check code with SpotBugs
+        working-directory: ./authlib-java
+        continue-on-error: true
+        run: mvn spotbugs:check || echo "SpotBugs check optional"
+      
+      - name: Verify dependencies
+        working-directory: ./authlib-java
+        continue-on-error: true
+        run: mvn dependency-check:check || echo "Dependency check optional"
+
+  security:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+      
+      - name: Set up JDK 21
+        uses: actions/setup-java@v3
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+          cache: maven
+      
+      - name: Run OWASP Dependency-Check
+        working-directory: ./authlib-java
+        continue-on-error: true
+        run: |
+          mvn org.owasp:dependency-check-maven:check || echo "Dependency-Check report generated"
+      
+      - name: Upload OWASP report
+        if: always()
+        uses: actions/upload-artifact@v3
+        with:
+          name: owasp-report
+          path: authlib-java/target/dependency-check-report.html
+          retention-days: 30

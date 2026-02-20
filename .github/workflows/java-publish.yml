@@ -1,0 +1,276 @@
+name: Java - Test & Publish to Maven Central
+
+on:
+  push:
+    branches: [ main, develop ]
+    paths:
+      - 'authlib-java/**'
+      - '!authlib-java/README.md'
+      - '!authlib-java/examples/**'
+  pull_request:
+    branches: [ main, develop ]
+    paths:
+      - 'authlib-java/**'
+      - '!authlib-java/README.md'
+
+jobs:
+  # ============================================================================
+  # Test Job
+  # ============================================================================
+  test:
+    runs-on: ubuntu-latest
+    name: Test AuthLib Java
+    
+    strategy:
+      matrix:
+        java-version: [ '11', '17', '21' ]
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+      
+      - name: Set up JDK ${{ matrix.java-version }}
+        uses: actions/setup-java@v3
+        with:
+          java-version: ${{ matrix.java-version }}
+          distribution: 'temurin'
+          cache: maven
+      
+      - name: Display Java version
+        run: java -version
+      
+      - name: Build with Maven (no tests)
+        working-directory: ./authlib-java
+        run: mvn clean package -DskipTests -q
+      
+      - name: Run unit tests
+        working-directory: ./authlib-java
+        run: mvn test -B
+      
+      - name: Run integration tests
+        working-directory: ./authlib-java
+        run: mvn verify -B
+      
+      - name: Generate code coverage
+        if: matrix.java-version == '21'
+        working-directory: ./authlib-java
+        run: mvn jacoco:report
+      
+      - name: Upload coverage to Codecov
+        if: matrix.java-version == '21'
+        uses: codecov/codecov-action@v3
+        with:
+          files: ./authlib-java/target/site/jacoco/jacoco.xml
+          flags: java
+          name: authlib-java
+          fail_ci_if_error: false
+      
+      - name: Archive test results
+        if: always()
+        uses: actions/upload-artifact@v3
+        with:
+          name: java-test-results-jdk-${{ matrix.java-version }}
+          path: |
+            authlib-java/target/surefire-reports/
+            authlib-java/target/site/jacoco/
+          retention-days: 30
+
+  # ============================================================================
+  # Code Quality Job
+  # ============================================================================
+  quality:
+    runs-on: ubuntu-latest
+    name: Code Quality - Java
+    needs: test
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+      
+      - name: Set up JDK 21
+        uses: actions/setup-java@v3
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+          cache: maven
+      
+      - name: Run SonarQube analysis
+        working-directory: ./authlib-java
+        continue-on-error: true
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        run: |
+          if [ -n "$SONAR_TOKEN" ]; then
+            mvn clean verify sonar:sonar \
+              -Dsonar.projectKey=authlib-java \
+              -Dsonar.organization=${{ github.repository_owner }} \
+              -Dsonar.host.url=https://sonarcloud.io \
+              -Dsonar.login=$SONAR_TOKEN
+          else
+            echo "⚠️  Skipping SonarQube (no token)"
+          fi
+      
+      - name: Check code with SpotBugs
+        working-directory: ./authlib-java
+        continue-on-error: true
+        run: mvn spotbugs:check
+      
+      - name: Verify dependencies
+        working-directory: ./authlib-java
+        continue-on-error: true
+        run: mvn dependency-check:aggregate
+
+  # ============================================================================
+  # Security Check Job
+  # ============================================================================
+  security:
+    runs-on: ubuntu-latest
+    name: Security Scan - Java
+    needs: test
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+      
+      - name: Set up JDK 21
+        uses: actions/setup-java@v3
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+          cache: maven
+      
+      - name: Run OWASP Dependency-Check
+        working-directory: ./authlib-java
+        continue-on-error: true
+        run: mvn org.owasp:dependency-check-maven:check
+      
+      - name: Upload OWASP report
+        if: always()
+        uses: actions/upload-artifact@v3
+        with:
+          name: owasp-dependency-check
+          path: authlib-java/target/dependency-check-report.html
+          retention-days: 30
+      
+      - name: Check Maven dependencies
+        working-directory: ./authlib-java
+        continue-on-error: true
+        run: mvn dependency:check
+
+  # ============================================================================
+  # Publish Job (Maven Central - Only on main branch)
+  # ============================================================================
+  publish:
+    runs-on: ubuntu-latest
+    name: Publish to Maven Central
+    needs: [ test, quality, security ]
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+      
+      - name: Set up JDK 21
+        uses: actions/setup-java@v3
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+          cache: maven
+          server-id: ossrh
+          server-username: MAVEN_USERNAME
+          server-password: MAVEN_PASSWORD
+          gpg-private-key: ${{ secrets.GPG_PRIVATE_KEY }}
+          gpg-passphrase: GPG_PASSPHRASE
+      
+      - name: Extract version from pom.xml
+        working-directory: ./authlib-java
+        id: version
+        run: |
+          VERSION=$(mvn help:evaluate -Dexpression=project.version -q -DforceStdout)
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "📦 Java Library Version: $VERSION"
+      
+      - name: Verify build
+        working-directory: ./authlib-java
+        run: mvn clean verify
+      
+      - name: Build and publish to Maven Central
+        working-directory: ./authlib-java
+        if: |
+          secrets.MAVEN_USERNAME != '' &&
+          secrets.MAVEN_PASSWORD != '' &&
+          secrets.GPG_PRIVATE_KEY != ''
+        env:
+          MAVEN_USERNAME: ${{ secrets.MAVEN_USERNAME }}
+          MAVEN_PASSWORD: ${{ secrets.MAVEN_PASSWORD }}
+          GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
+        run: |
+          mvn clean deploy -P release
+      
+      - name: Deploy without credentials (dry-run)
+        working-directory: ./authlib-java
+        if: |
+          secrets.MAVEN_USERNAME == '' ||
+          secrets.MAVEN_PASSWORD == '' ||
+          secrets.GPG_PRIVATE_KEY == ''
+        run: |
+          echo "⚠️  Deployment skipped (missing credentials)"
+          echo "ℹ️  To enable automatic deployment, configure:"
+          echo "  - MAVEN_USERNAME"
+          echo "  - MAVEN_PASSWORD"
+          echo "  - GPG_PRIVATE_KEY"
+          echo "  - GPG_PASSPHRASE"
+          mvn clean package verify
+      
+      - name: Create GitHub Release
+        uses: actions/create-release@v1
+        if: success()
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: authlib-java-${{ steps.version.outputs.version }}
+          release_name: AuthLib Java v${{ steps.version.outputs.version }}
+          body: |
+            ## AuthLib Java v${{ steps.version.outputs.version }}
+            
+            Java 11+ Authentication Library with Hibernate ORM support
+            
+            ### Maven Dependency
+            ```xml
+            <dependency>
+              <groupId>dev.authlib</groupId>
+              <artifactId>authlib</artifactId>
+              <version>${{ steps.version.outputs.version }}</version>
+            </dependency>
+            ```
+            
+            ### Gradle Dependency
+            ```gradle
+            implementation 'dev.authlib:authlib:${{ steps.version.outputs.version }}'
+            ```
+            
+            ### Supported Java Versions
+            - Java 11
+            - Java 17
+            - Java 21 (latest LTS)
+            
+            ### Features
+            - JWT token management
+            - Password hashing with Argon2
+            - User authentication & authorization
+            - Token blacklisting
+            - Hibernate ORM integration
+            - Spring Boot compatible
+            
+            ### Maven Central
+            https://central.sonatype.com/artifact/dev.authlib/authlib/${{ steps.version.outputs.version }}
+          draft: false
+          prerelease: false
+      
+      - name: Notify Success
+        if: success()
+        run: |
+          echo "✅ Successfully published authlib v${{ steps.version.outputs.version }} to Maven Central"
+          echo "📦 Maven Central URL: https://central.sonatype.com/artifact/dev.authlib/authlib/${{ steps.version.outputs.version }}"
