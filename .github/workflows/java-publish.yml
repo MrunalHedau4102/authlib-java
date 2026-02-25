@@ -6,10 +6,6 @@ on:
   workflow_dispatch:
   push:
     branches: [ main ]
-    paths:
-      - 'authlib-java/**'
-      - '!authlib-java/README.md'
-      - '!authlib-java/examples/**'
 
 jobs:
   # ============================================================================
@@ -38,27 +34,23 @@ jobs:
         run: java -version
       
       - name: Build with Maven (no tests)
-        working-directory: ./authlib-java
         run: mvn clean package -DskipTests -q
       
       - name: Run unit tests
-        working-directory: ./authlib-java
         run: mvn test -B
       
       - name: Run integration tests
-        working-directory: ./authlib-java
         run: mvn verify -B
       
       - name: Generate code coverage
         if: matrix.java-version == '21'
-        working-directory: ./authlib-java
         run: mvn jacoco:report
       
       - name: Upload coverage to Codecov
         if: matrix.java-version == '21'
         uses: codecov/codecov-action@v3
         with:
-          files: ./authlib-java/target/site/jacoco/jacoco.xml
+          files: ./target/site/jacoco/jacoco.xml
           flags: java
           name: authlib-java
           fail_ci_if_error: false
@@ -69,8 +61,8 @@ jobs:
         with:
           name: java-test-results-jdk-${{ matrix.java-version }}
           path: |
-            authlib-java/target/surefire-reports/
-            authlib-java/target/site/jacoco/
+            target/surefire-reports/
+            target/site/jacoco/
           retention-days: 30
 
   # ============================================================================
@@ -93,7 +85,6 @@ jobs:
           cache: maven
       
       - name: Run SonarQube analysis
-        working-directory: ./authlib-java
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
         run: |
@@ -108,11 +99,9 @@ jobs:
           fi
       
       - name: Check code with SpotBugs
-        working-directory: ./authlib-java
         run: mvn spotbugs:check || echo "⚠️  SpotBugs check optional"
       
       - name: Verify dependencies
-        working-directory: ./authlib-java
         run: mvn dependency-check:aggregate || echo "⚠️  Dependency check optional"
 
   # ============================================================================
@@ -134,7 +123,6 @@ jobs:
           cache: maven
       
       - name: Run OWASP Dependency-Check
-        working-directory: ./authlib-java
         run: mvn org.owasp:dependency-check-maven:check || echo "⚠️  Dependency-Check report generated"
       
       - name: Upload OWASP report
@@ -142,11 +130,10 @@ jobs:
         uses: actions/upload-artifact@v3
         with:
           name: owasp-dependency-check
-          path: authlib-java/target/dependency-check-report.html
+          path: target/dependency-check-report.html
           retention-days: 30
       
       - name: Check Maven dependencies
-        working-directory: ./authlib-java
         run: mvn dependency:check || echo "⚠️  Dependency check optional"
 
   # ============================================================================
@@ -177,7 +164,6 @@ jobs:
           gpg-passphrase: GPG_PASSPHRASE
       
       - name: Extract version from pom.xml
-        working-directory: ./authlib-java
         id: version
         run: |
           VERSION=$(mvn help:evaluate -Dexpression=project.version -q -DforceStdout)
@@ -185,11 +171,9 @@ jobs:
           echo "📦 Java Library Version: $VERSION"
       
       - name: Verify build
-        working-directory: ./authlib-java
         run: mvn clean verify
       
       - name: Build and publish to Maven Central
-        working-directory: ./authlib-java
         if: |
           env.MAVEN_USERNAME != '' &&
           env.MAVEN_PASSWORD != '' &&
@@ -203,7 +187,6 @@ jobs:
           mvn clean deploy -P release
       
       - name: Deploy without credentials (dry-run)
-        working-directory: ./authlib-java
         if: |
           env.MAVEN_USERNAME == '' ||
           env.MAVEN_PASSWORD == '' ||

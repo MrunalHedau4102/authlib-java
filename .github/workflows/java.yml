@@ -3,14 +3,8 @@ name: Java Tests
 on:
   push:
     branches: [ main, develop ]
-    paths:
-      - 'authlib-java/**'
-      - '!authlib-java/README.md'
   pull_request:
     branches: [ main, develop ]
-    paths:
-      - 'authlib-java/**'
-      - '!authlib-java/README.md'
 
 jobs:
   test:
@@ -35,19 +29,15 @@ jobs:
         run: java -version
       
       - name: Build with Maven
-        working-directory: ./authlib-java
         run: mvn clean package -DskipTests
       
       - name: Run tests with Maven
-        working-directory: ./authlib-java
         run: mvn test -B
       
       - name: Run integration tests
-        working-directory: ./authlib-java
         run: mvn verify -B
       
       - name: Generate code coverage
-        working-directory: ./authlib-java
         run: mvn jacoco:report
       
       - name: Upload coverage to Codecov
@@ -65,15 +55,15 @@ jobs:
         with:
           name: java-test-results-jdk-${{ matrix.java-version }}
           path: |
-            authlib-java/target/surefire-reports/
-            authlib-java/target/site/jacoco/
+            target/surefire-reports/
+            target/site/jacoco/
           retention-days: 30
       
       - name: Publish test results
         if: always()
         uses: EnricoMi/publish-unit-test-result-action@v2
         with:
-          files: authlib-java/target/surefire-reports/*.xml
+          files: target/surefire-reports/*.xml
           check_name: Java JDK ${{ matrix.java-version }} Test Results
 
   quality:
@@ -90,7 +80,6 @@ jobs:
           cache: maven
       
       - name: Run SonarQube analysis
-        working-directory: ./authlib-java
         continue-on-error: true
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
@@ -105,12 +94,10 @@ jobs:
           fi
       
       - name: Check code with SpotBugs
-        working-directory: ./authlib-java
         continue-on-error: true
         run: mvn spotbugs:check || echo "⚠️  SpotBugs check optional"
       
       - name: Verify dependencies
-        working-directory: ./authlib-java
         continue-on-error: true
         run: mvn dependency-check:check || echo "⚠️  Dependency check optional"
 
@@ -128,7 +115,6 @@ jobs:
           cache: maven
       
       - name: Run OWASP Dependency-Check
-        working-directory: ./authlib-java
         continue-on-error: true
         run: mvn org.owasp:dependency-check-maven:check || echo "⚠️  Dependency-Check report generated"
       
@@ -137,10 +123,9 @@ jobs:
         uses: actions/upload-artifact@v3
         with:
           name: owasp-report
-          path: authlib-java/target/dependency-check-report.html
+          path: target/dependency-check-report.html
           retention-days: 30
       
       - name: Check Maven dependencies
-        working-directory: ./authlib-java
         continue-on-error: true
         run: mvn dependency:check || echo "⚠️  Dependency check optional"
