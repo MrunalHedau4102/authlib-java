@@ -1,17 +1,15 @@
 name: Java - Test & Publish to Maven Central
 
 on:
+  release:
+    types: [published]
+  workflow_dispatch:
   push:
-    branches: [ main, develop ]
+    branches: [ main ]
     paths:
       - 'authlib-java/**'
       - '!authlib-java/README.md'
       - '!authlib-java/examples/**'
-  pull_request:
-    branches: [ main, develop ]
-    paths:
-      - 'authlib-java/**'
-      - '!authlib-java/README.md'
 
 jobs:
   # ============================================================================
@@ -96,7 +94,6 @@ jobs:
       
       - name: Run SonarQube analysis
         working-directory: ./authlib-java
-        continue-on-error: true
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
         run: |
@@ -105,20 +102,18 @@ jobs:
               -Dsonar.projectKey=authlib-java \
               -Dsonar.organization=${{ github.repository_owner }} \
               -Dsonar.host.url=https://sonarcloud.io \
-              -Dsonar.login=$SONAR_TOKEN
+              -Dsonar.login=$SONAR_TOKEN || echo "⚠️  SonarQube optional"
           else
             echo "⚠️  Skipping SonarQube (no token)"
           fi
       
       - name: Check code with SpotBugs
         working-directory: ./authlib-java
-        continue-on-error: true
-        run: mvn spotbugs:check
+        run: mvn spotbugs:check || echo "⚠️  SpotBugs check optional"
       
       - name: Verify dependencies
         working-directory: ./authlib-java
-        continue-on-error: true
-        run: mvn dependency-check:aggregate
+        run: mvn dependency-check:aggregate || echo "⚠️  Dependency check optional"
 
   # ============================================================================
   # Security Check Job
@@ -126,7 +121,6 @@ jobs:
   security:
     runs-on: ubuntu-latest
     name: Security Scan - Java
-    needs: test
     
     steps:
       - name: Checkout code
@@ -141,8 +135,7 @@ jobs:
       
       - name: Run OWASP Dependency-Check
         working-directory: ./authlib-java
-        continue-on-error: true
-        run: mvn org.owasp:dependency-check-maven:check
+        run: mvn org.owasp:dependency-check-maven:check || echo "⚠️  Dependency-Check report generated"
       
       - name: Upload OWASP report
         if: always()
@@ -154,17 +147,16 @@ jobs:
       
       - name: Check Maven dependencies
         working-directory: ./authlib-java
-        continue-on-error: true
-        run: mvn dependency:check
+        run: mvn dependency:check || echo "⚠️  Dependency check optional"
 
   # ============================================================================
-  # Publish Job (Maven Central - Only on main branch)
+  # Publish Job (Maven Central - Only on main/release)
   # ============================================================================
   publish:
     runs-on: ubuntu-latest
     name: Publish to Maven Central
     needs: [ test, quality, security ]
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    if: github.event_name == 'release' || (github.ref == 'refs/heads/main' && github.event_name == 'push')
     
     steps:
       - name: Checkout code

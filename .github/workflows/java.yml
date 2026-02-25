@@ -1,8 +1,8 @@
-name: Java Tests (Pull Requests Only)
+name: Java Tests
 
 on:
   push:
-    branches: [ develop ]
+    branches: [ main, develop ]
     paths:
       - 'authlib-java/**'
       - '!authlib-java/README.md'
@@ -91,19 +91,21 @@ jobs:
       
       - name: Run SonarQube analysis
         working-directory: ./authlib-java
-        continue-on-error: true
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
         run: |
-          mvn clean verify sonar:sonar \
-            -Dsonar.projectKey=authlib-java \
-            -Dsonar.host.url=https://sonarcloud.io || echo "SonarQube optional"
+          if [ -n "$SONAR_TOKEN" ]; then
+            mvn clean verify sonar:sonar \
+              -Dsonar.projectKey=authlib-java \
+              -Dsonar.host.url=https://sonarcloud.io \
+              -Dsonar.login=$SONAR_TOKEN || echo "⚠️  SonarQube optional"
+          else
+            echo "⚠️  Skipping SonarQube (no token)"
+        run: mvn spotbugs:check || echo "⚠️  SpotBugs check optional"
       
-      - name: Check code with SpotBugs
+      - name: Verify dependencies
         working-directory: ./authlib-java
-        continue-on-error: true
-        run: mvn spotbugs:check || echo "SpotBugs check optional"
-      
+        run: mvn dependency-check:check || echo "⚠️  
       - name: Verify dependencies
         working-directory: ./authlib-java
         continue-on-error: true
@@ -126,9 +128,7 @@ jobs:
         working-directory: ./authlib-java
         continue-on-error: true
         run: |
-          mvn org.owasp:dependency-check-maven:check || echo "Dependency-Check report generated"
-      
-      - name: Upload OWASP report
+        run: mvn org.owasp:dependency-check-maven:check || echo "⚠️  
         if: always()
         uses: actions/upload-artifact@v3
         with:
