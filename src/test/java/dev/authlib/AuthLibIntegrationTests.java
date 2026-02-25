@@ -57,7 +57,7 @@ public class AuthLibIntegrationTests {
 
     @BeforeEach
     void setUp() {
-        authService = new AuthService(sessionFactory, config);
+        authService = new AuthService(config);
         userService = new UserService(sessionFactory);
     }
 
