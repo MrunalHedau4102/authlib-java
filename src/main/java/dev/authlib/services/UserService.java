@@ -49,6 +49,7 @@ public class UserService {
         try (Session session = sessionFactory.openSession()) {
             var transaction = session.beginTransaction();
             session.persist(user);
+            session.flush();  // Force ID generation before commit
             transaction.commit();
             return user;
         } catch (Exception e) {

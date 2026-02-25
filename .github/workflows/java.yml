@@ -37,18 +37,6 @@ jobs:
       - name: Run integration tests
         run: mvn verify -B
       
-      - name: Generate code coverage
-        run: mvn jacoco:report
-      
-      - name: Upload coverage to Codecov
-        if: matrix.java-version == '21'
-        uses: codecov/codecov-action@v4
-        with:
-          files: ./authlib-java/target/site/jacoco/jacoco.xml
-          flags: java
-          name: java-coverage
-          fail_ci_if_error: false
-      
       - name: Archive test results
         if: always()
         uses: actions/upload-artifact@v4

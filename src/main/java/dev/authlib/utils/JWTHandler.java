@@ -12,6 +12,7 @@ import java.time.temporal.ChronoUnit;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.UUID;
 
 /**
  * JWT token handling utility
@@ -41,6 +42,7 @@ public class JWTHandler {
             .plus(config.JWT_ACCESS_TOKEN_EXPIRY_MINUTES, ChronoUnit.MINUTES);
 
         var builder = JWT.create()
+            .withJWTId(UUID.randomUUID().toString())
             .withIssuer("authlib")
             .withIssuedAt(Date.from(Instant.now()))
             .withExpiresAt(Date.from(expiresAt))
@@ -78,6 +80,7 @@ public class JWTHandler {
             .plus(config.JWT_REFRESH_TOKEN_EXPIRY_DAYS, ChronoUnit.DAYS);
 
         var builder = JWT.create()
+            .withJWTId(UUID.randomUUID().toString())
             .withIssuer("authlib")
             .withIssuedAt(Date.from(Instant.now()))
             .withExpiresAt(Date.from(expiresAt))

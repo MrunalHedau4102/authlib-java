@@ -1,6 +1,7 @@
 package dev.authlib;
 
 import dev.authlib.config.Config;
+import dev.authlib.models.TokenBlacklist;
 import dev.authlib.models.User;
 import dev.authlib.services.AuthService;
 import dev.authlib.services.UserService;
@@ -44,6 +45,7 @@ public class AuthLibIntegrationTests {
         hibernateConfig.setProperty("hibernate.dialect", "org.hibernate.dialect.H2Dialect");
         hibernateConfig.setProperty("hibernate.hbm2ddl.auto", "create-drop");
         hibernateConfig.addAnnotatedClass(User.class);
+        hibernateConfig.addAnnotatedClass(TokenBlacklist.class);
 
         sessionFactory = hibernateConfig.buildSessionFactory();
     }
@@ -57,7 +59,7 @@ public class AuthLibIntegrationTests {
 
     @BeforeEach
     void setUp() {
-        authService = new AuthService(config);
+        authService = new AuthService(config, sessionFactory);
         userService = new UserService(sessionFactory);
     }
 

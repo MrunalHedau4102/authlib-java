@@ -88,21 +88,31 @@ public class AuthService {
     }
 
     public AuthService(Config config) {
+        this(config, null);
+    }
+
+    public AuthService(Config config, SessionFactory externalSessionFactory) {
         this.config = config;
         this.jwtHandler = new JWTHandler(config);
         this.passwordHandler = new PasswordHandler();
 
-        // Initialize Hibernate
-        Configuration hibernateConfig = new Configuration();
-        hibernateConfig.setProperty("hibernate.connection.url", config.DATABASE_URL);
-        hibernateConfig.setProperty("hibernate.connection.username", config.DATABASE_USER);
-        hibernateConfig.setProperty("hibernate.connection.password", config.DATABASE_PASSWORD);
-        hibernateConfig.setProperty("hibernate.dialect", "org.hibernate.dialect.H2Dialect");
-        hibernateConfig.setProperty("hibernate.hbm2ddl.auto", "update");
-        hibernateConfig.addAnnotatedClass(User.class);
-        hibernateConfig.addAnnotatedClass(TokenBlacklist.class);
+        // Use provided sessionFactory or create new one
+        if (externalSessionFactory != null) {
+            this.sessionFactory = externalSessionFactory;
+        } else {
+            // Initialize Hibernate
+            Configuration hibernateConfig = new Configuration();
+            hibernateConfig.setProperty("hibernate.connection.url", config.DATABASE_URL);
+            hibernateConfig.setProperty("hibernate.connection.username", config.DATABASE_USER);
+            hibernateConfig.setProperty("hibernate.connection.password", config.DATABASE_PASSWORD);
+            hibernateConfig.setProperty("hibernate.dialect", "org.hibernate.dialect.H2Dialect");
+            hibernateConfig.setProperty("hibernate.hbm2ddl.auto", "update");
+            hibernateConfig.addAnnotatedClass(User.class);
+            hibernateConfig.addAnnotatedClass(TokenBlacklist.class);
 
-        this.sessionFactory = hibernateConfig.buildSessionFactory();
+            this.sessionFactory = hibernateConfig.buildSessionFactory();
+        }
+
         this.userService = new UserService(sessionFactory);
     }
 
@@ -146,7 +156,7 @@ public class AuthService {
             throw new InvalidCredentials("Invalid email or password");
         }
 
-        userService.updateLastLogin(user.getId());
+        user = userService.updateLastLogin(user.getId());
 
         Map<String, Object> tokens = generateTokens(user);
 
